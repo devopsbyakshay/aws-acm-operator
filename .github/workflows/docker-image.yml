@@ -25,24 +25,6 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-
-      - name: Extract version from tags
-        id: get_version
-        run: |
-          # Get the latest tag
-          latest_tag=$(git describe --tags `git rev-list --tags --max-count=1`)
-          echo "Latest tag: $latest_tag"
-          # Extract the numeric part and increment it
-          if [[ $latest_tag =~ ^0\.0\.[0-9]+$ ]]; then
-            latest_version=${latest_tag#0.0.}
-            new_version=$((latest_version + 1))
-            new_tag="0.0.${new_version}"
-          else
-            new_tag="0.0.1"
-          fi
-          echo "New tag: $new_tag"
-          echo "new_tag=$new_tag" >> $GITHUB_ENV
-
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
@@ -50,7 +32,7 @@ jobs:
           push: true
           tags: |
             akki2208/aws-acm-operator:latest
-            akki2208/aws-acm-operator:${{ env.new_tag }}
+            akki2208/aws-acm-operator:${{ secrets.RELEASE_TAG }}
 
       - name: Log out from Docker Hub
         run: docker logout
