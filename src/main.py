@@ -5,7 +5,7 @@ import datetime
 import pytz
 
 from common_helper import log_function_entry_exit
-from k8s_helper import create_config_map, get_acm_domain_from_services, get_all_services,get_config_map_data,get_current_namespace,update_service_annotation, remove_from_config_map
+from k8s_helper import create_config_map, get_acm_domain_from_services, get_all_services,get_config_map_data,get_current_namespace,update_service_annotation, remove_from_config_map, get_all_ingresses, update_ingress_annotation
 from aws_helper import create_cert, create_dns_validation, find_cert, get_acm_client, get_route53_client, wait_for_validation,delete_cert,delete_dns_validation
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -34,11 +34,13 @@ def main():
             config_map_name = os.getenv('CONFIG_MAP_NAME', 'acm-cert-config')
             current_namespace = get_current_namespace()
             annotation_key = os.getenv('CERT_ARN_ANNOTATION_KEY', 'aws.k8s.acm.manager/cert_arn')  # Annotation key for storing certificate ARN
-
-            service_list = get_all_services()
+            annotation_key_cert_domain = os.getenv('CERT_DOMAIN_ANNOTATION_KEY', 'aws.k8s.acm.manager/domain_name')
+            
+            #service_list = get_all_services()
+            ingress_list = get_all_ingresses()
             logger.info("Retrieved all services across all namespaces")
 
-            acm_domain_list = get_acm_domain_from_services(service_list)
+            acm_domain_list = get_acm_domain_from_services(ingress_list, annotation_key_cert_domain)
             logger.info(f"ACM domain list: {acm_domain_list}")
 
             # Process domains and update certificates
@@ -64,7 +66,8 @@ def main():
                 create_config_map(current_namespace, config_map_name, domain_name, cert_arn)
 
                 logger.info(f"Updating service {service_name} in namespace {namespace} with annotation {annotation_key}: {cert_arn}")
-                update_service_annotation(namespace, service_name, annotation_key, cert_arn)
+                #update_service_annotation(namespace, service_name, annotation_key, cert_arn)
+                update_ingress_annotation(namespace, service_name, annotation_key, cert_arn)
 
             # Cleanup process
             if is_time_to_cleanup():
@@ -75,6 +78,7 @@ def main():
                     logger.info(f"configmap data: {config_map_data}")
                     for domain_name, cert_arn in config_map_data.items():
                         logger.info(f"checking for cert arn {cert_arn} in service_certs")
+                        domain_name_for_compare = domain_name.replace("star.","*.")
                         if domain_name not in service_certs:
                             logger.info(f"Cleaning up certificate {cert_arn} for domain {domain_name}")
                             acm_client = get_acm_client()

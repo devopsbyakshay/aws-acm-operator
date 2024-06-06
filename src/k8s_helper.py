@@ -72,6 +72,31 @@ def get_all_services():
         return []
 
 @log_function_entry_exit
+def get_all_ingresses():
+    try:
+        config.load_incluster_config()
+        logger.info("Loaded in-cluster Kubernetes configuration")
+
+        v1 = client.CoreV1Api()
+        logger.info("Retrieving all ingress across all namespaces")
+        services = v1.list_ingress_for_all_namespaces().items
+
+        service_info = []
+        for service in services:
+            namespace_name = service.metadata.namespace
+            service_name = service.metadata.name
+            annotations = service.metadata.annotations or {}
+            service_info.append((namespace_name, service_name, annotations))
+            logger.debug(f"Namespace: {namespace_name}, Ingress: {service_name}, Annotations: {annotations}")
+
+        return service_info
+
+    except Exception as e:
+        logger.error(f"Error retrieving ingresses: {e}")
+        return []
+    
+
+@log_function_entry_exit
 def get_acm_domain_from_services(service_list):
     domain_list = []
     if service_list:
@@ -107,7 +132,7 @@ def get_acm_domain(namespace_list):
 @log_function_entry_exit
 def create_config_map(namespace, config_map_name, domain_name, cert_arn):
     config.load_incluster_config()
-
+    domain_name = domain_name.replace("*", "star")
     v1 = client.CoreV1Api()
     try:
         # Try to create the ConfigMap
@@ -144,7 +169,23 @@ def update_service_annotation(namespace, service_name, annotation_key, annotatio
 
 
 @log_function_entry_exit
-def get_acm_domain_from_services(service_list):
+def update_ingress_annotation(namespace, service_name, annotation_key, annotation_value):
+    config.load_incluster_config()
+    v1 = client.CoreV1Api()
+
+    try:
+        service = v1.read_namespaced_ingress(name=service_name, namespace=namespace)
+        if service.metadata.annotations is None:
+            service.metadata.annotations = {}
+        service.metadata.annotations[annotation_key] = annotation_value
+        v1.patch_namespaced_ingress(name=service_name, namespace=namespace, body=service)
+        logger.info(f"Updated Ingress {service_name} in namespace {namespace} with annotation {annotation_key}: {annotation_value}")
+    except Exception as e:
+        logger.error(f"Failed to update Ingress {service_name} in namespace {namespace} with annotation {annotation_key}: {annotation_value}, Error: {e}")
+
+
+@log_function_entry_exit
+def get_acm_domain_from_services(service_list, annotation_key_cert_domain):
     domain_list = []
     if service_list:
         logger.info("Processing services for ACM domain annotations")
@@ -152,7 +193,7 @@ def get_acm_domain_from_services(service_list):
             logger.info(f"Namespace: {namespace}, Service: {service_name}")
             logger.debug(f"Annotations: {annotations}")
             for key, value in annotations.items():
-                if key == "aws.k8s.acm.manager/domain_name":
+                if key == annotation_key_cert_domain:
                     domain_list.append((namespace, service_name, value))
                 logger.debug(f"  {key}: {value}")
     else:
