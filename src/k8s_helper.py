@@ -77,7 +77,7 @@ def get_all_ingresses():
         config.load_incluster_config()
         logger.info("Loaded in-cluster Kubernetes configuration")
 
-        v1 = client.CoreV1Api()
+        v1 = client.NetworkingV1Api()
         logger.info("Retrieving all ingress across all namespaces")
         services = v1.list_ingress_for_all_namespaces().items
 
@@ -171,7 +171,7 @@ def update_service_annotation(namespace, service_name, annotation_key, annotatio
 @log_function_entry_exit
 def update_ingress_annotation(namespace, service_name, annotation_key, annotation_value):
     config.load_incluster_config()
-    v1 = client.CoreV1Api()
+    v1 = client.NetworkingV1Api()
 
     try:
         service = v1.read_namespaced_ingress(name=service_name, namespace=namespace)
